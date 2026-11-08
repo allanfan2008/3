@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Dot Grid & Pixel Art Sweep</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta property="og:image" content="https://preview.redd.it/the-original-video-of-67-kid-v0-vlnntt4zc72g1.jpeg?width=250&format=pjpg&auto=webp&s=d5de1bdb2b5547ffef214dbcf42b3f0a15e699c6">
+    <link rel="apple-touch-icon" href="https://preview.redd.it/the-original-video-of-67-kid-v0-vlnntt4zc72g1.jpeg?width=250&format=pjpg&auto=webp&s=d5de1bdb2b5547ffef214dbcf42b3f0a15e699c6">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            color: #f3f4f6;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        /* Custom scrollbar for modals */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        /* Upgraded Laser Scanner Beam Animation */
+        @keyframes scanSweepBeam {
+            0% {
+                transform: translateX(-150%) skewX(-15deg);
+                opacity: 0.9;
+            }
+            50% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateX(250%) skewX(-15deg);
+                opacity: 0.9;
+            }
+        }
+        .scanner-beam {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 250px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(244, 63, 94, 0.1), 
+                rgba(244, 63, 94, 0.5), 
+                rgba(255, 255, 255, 0.95), 
+                rgba(56, 189, 248, 0.5), 
+                rgba(56, 189, 248, 0.1), 
+                transparent
+            );
+            box-shadow: 0 0 60px rgba(244, 63, 94, 0.6), 0 0 120px rgba(56, 189, 248, 0.4), inset 0 0 30px rgba(255, 255, 255, 0.8);
+            pointer-events: none;
+            z-index: 50;
+            display: none;
+            filter: blur(1px);
+        }
+        .animate-scan {
+            display: block;
+            animation: scanSweepBeam 1.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        /* Minimalist Dark Glassmorphism */
+        .glass-dark {
+            background: rgba(15, 15, 18, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="h-full w-full select-none relative flex flex-col bg-black">
+
+    <!-- Top-Left 4-Tap Settings Trigger -->
+    <div id="trigger-btn" class="absolute top-4 left-4 z-40 glass-dark px-3.5 py-2 rounded-2xl flex items-center space-x-2 cursor-pointer shadow-lg hover:bg-white/10 transition active:scale-95 group">
+        <div class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping absolute left-3.5"></div>
+        <div class="w-2.5 h-2.5 rounded-full bg-rose-500 relative"></div>
+        <span class="text-xs font-medium text-gray-300 group-hover:text-white">設定 (4下)</span>
+    </div>
+
+    <!-- Stats / Info Indicator (Top Right) -->
+    <div class="absolute top-4 right-4 z-40 glass-dark px-4 py-2 rounded-2xl flex items-center space-x-3 shadow-lg text-xs text-gray-400">
+        <div>網格: <span id="stat-grid" class="font-bold text-rose-400">0 / 0</span></div>
+        <div class="h-3 w-px bg-white/10"></div>
+        <div>模式: <span id="stat-mode" class="font-bold text-sky-400">經典紅點</span></div>
+    </div>
+
+    <!-- Interactive Canvas Area -->
+    <div id="canvas-container" class="flex-1 w-full h-full relative cursor-crosshair overflow-hidden bg-black">
+        <canvas id="dot-canvas" class="w-full h-full block"></canvas>
+        
+        <!-- Center Initial Hint -->
+        <div id="intro-hint" class="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-500">
+            <div class="glass-dark px-8 py-6 rounded-3xl text-center max-w-sm mx-4 shadow-2xl border border-white/10">
+                <div class="text-xl font-bold mb-2 text-white tracking-tight">極簡暗黑流光點陣</div>
+                <p class="text-xs text-gray-400 leading-relaxed">按住滑鼠或 <kbd class="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-[10px] font-mono text-gray-200">Space</kbd> 空白鍵（手機按左下角按鈕）持續生成流光點。塞滿後觸發高質感雷射光刷清除動畫！</p>
+                <div class="mt-4 text-[10px] text-rose-400 bg-rose-500/10 py-1.5 px-3 rounded-xl inline-block border border-rose-500/20">💡 提示：點擊左上角按鈕 4下 開啟設定</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Virtual Spacebar Button (Bottom Center) -->
+    <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-45 md:hidden">
+        <button id="virtual-space-btn" class="glass-dark px-8 py-3.5 rounded-full shadow-2xl border border-white/20 text-xs font-bold text-white tracking-wider active:scale-95 transition bg-black/80 flex items-center space-x-2">
+            <svg class="w-4 h-4 text-rose-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span>按住生成點陣</span>
+        </button>
+    </div>
+
+    <!-- Scanner Beam Element -->
+    <div id="scanner-beam" class="scanner-beam"></div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="glass-dark bg-[#0f0f12]/95 w-full max-w-md rounded-3xl p-6 shadow-2xl border border-white/15 transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                    <h2 class="text-lg font-bold text-white tracking-wide">互動設定與像素畫轉換</h2>
+                </div>
+                <button id="close-modal" class="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="overflow-y-auto space-y-6 pr-1">
+                
+                <!-- Color Mode Selection -->
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">色彩生成模式</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button data-mode="classic" class="mode-btn px-3 py-2.5 rounded-xl text-xs font-medium border border-rose-500 bg-rose-500/10 text-rose-400 transition">經典紅點</button>
+                        <button data-mode="random" class="mode-btn px-3 py-2.5 rounded-xl text-xs font-medium border border-white/10 bg-white/5 text-gray-300 hover:bg-white/15 transition">隨機色彩</button>
+                        <button data-mode="custom" class="mode-btn px-3 py-2.5 rounded-xl text-xs font-medium border border-white/10 bg-white/5 text-gray-300 hover:bg-white/15 transition">自定義色</button>
+                    </div>
+                </div>
+
+                <!-- Custom Color Picker -->
+                <div id="custom-color-container" class="hidden bg-white/5 p-4 rounded-2xl space-y-3 border border-white/10">
+                    <label class="block text-xs font-medium text-gray-300">選擇主要霓虹發光色</label>
+                    <div class="flex items-center space-x-3">
+                        <input type="color" id="color-picker" value="#ff3366" class="w-12 h-10 rounded-xl bg-transparent cursor-pointer border-0">
+                        <span id="color-hex-text" class="text-xs font-mono text-gray-300">#FF3366</span>
+                    </div>
+                </div>
+
+                <!-- Image Upload & Pixelation Section -->
+                <div class="space-y-3">
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider">圖片上傳轉像素點矩陣</label>
+                    <div class="border-2 border-dashed border-white/15 rounded-2xl p-5 text-center hover:border-rose-500 transition cursor-pointer relative group bg-white/[0.02]">
+                        <input type="file" id="image-upload" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10">
+                        <div class="flex flex-col items-center space-y-2 pointer-events-none">
+                            <svg class="w-8 h-8 text-gray-400 group-hover:text-rose-500 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <div class="text-xs font-medium text-gray-200">點擊或拖放圖片至此</div>
+                            <div class="text-[10px] text-gray-400">自動拉伸填滿並轉換成暗黑像素點陣</div>
+                        </div>
+                    </div>
+                    
+                    <div id="image-status-box" class="hidden flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 text-xs">
+                        <div class="flex items-center space-x-2 truncate">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span id="uploaded-filename" class="text-gray-200 truncate"></span>
+                        </div>
+                        <button id="clear-image-btn" class="text-rose-400 hover:text-rose-300 font-medium ml-2 shrink-0">清除圖片</button>
+                    </div>
+                </div>
+
+                <!-- Grid Density Setting -->
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs font-medium text-gray-300">
+                        <span>網格密度 (點大小)</span>
+                        <span id="grid-size-val" class="font-mono text-rose-400">30 px</span>
+                    </div>
+                    <input type="range" id="grid-spacing-range" min="15" max="60" value="30" class="w-full accent-rose-500 bg-white/20 rounded-lg appearance-none h-2 cursor-pointer">
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="pt-2 flex space-x-3">
+                    <button id="reset-canvas-btn" class="flex-1 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-gray-300 transition border border-white/10">清除畫面重置</button>
+                    <button id="apply-settings-btn" class="flex-1 py-3 rounded-2xl bg-rose-500 hover:bg-rose-600 text-xs font-semibold text-white transition shadow-lg shadow-rose-500/30">確認套用</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50 glass-dark px-5 py-2.5 rounded-2xl text-xs text-white shadow-2xl opacity-0 pointer-events-none transition-all duration-300 translate-y-4 border border-white/15 flex items-center space-x-2">
+        <span id="toast-icon">✨</span>
+        <span id="toast-msg">提示訊息</span>
+    </div>
+
+    <script>
+        // Application State & Variables
+        const canvas = document.getElementById('dot-canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        const scannerBeam = document.getElementById('scanner-beam');
+        
+        let gridSpacing = 30;
+        let dotRadius = 6;
+        let cols = 0;
+        let rows = 0;
+        let grid = [];
+        let filledCount = 0;
+        let totalGridCount = 0;
+        let isSweeping = false;
+        let sparkParticles = [];
+
+        // Settings State
+        let colorMode = 'classic'; // 'classic', 'random', 'custom'
+        let customColor = '#ff3366';
+        let pixelImage = null;
+        let imageColors = [];
+
+        // 4-Tap Trigger State
+        let tapCount = 0;
+        let tapTimer = null;
+        const triggerBtn = document.getElementById('trigger-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeModalBtn = document.getElementById('close-modal');
+        const applySettingsBtn = document.getElementById('apply-settings-btn');
+        const resetCanvasBtn = document.getElementById('reset-canvas-btn');
+        const toast = document.getElementById('toast');
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            initGrid();
+        }
+
+        function initGrid() {
+            cols = Math.floor(canvas.width / gridSpacing);
+            rows = Math.floor(canvas.height / gridSpacing);
+            
+            const paddingX = (canvas.width - (cols * gridSpacing)) / 2 + gridSpacing / 2;
+            const paddingY = (canvas.height - (rows * gridSpacing)) / 2 + gridSpacing / 2;
+
+            grid = [];
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    grid.push({
+                        r: r,
+                        c: c,
+                        x: paddingX + c * gridSpacing,
+                        y: paddingY + r * gridSpacing,
+                        filled: false,
+                        color: '#ff3366',
+                        scale: 0,
+                        pulse: Math.random() * Math.PI
+                    });
+                }
+            }
+            totalGridCount = grid.length;
+            filledCount = 0;
+            sparkParticles = [];
+            updateStats();
+            redraw();
+        }
+
+        function updateStats() {
+            document.getElementById('stat-grid').innerText = `${filledCount} / ${totalGridCount}`;
+            const modeNames = { 'classic': '經典紅點', 'random': '隨機色彩', 'custom': '自定義色' };
+            document.getElementById('stat-mode').innerText = pixelImage ? '圖片像素化' : (modeNames[colorMode] || '自定義');
+        }
+
+        function getPointColor(r, c) {
+            if (pixelImage && imageColors.length > 0) {
+                const imgR = Math.floor((r / rows) * imageColors.length);
+                const imgC = Math.floor((c / cols) * imageColors[0].length);
+                const rgb = imageColors[imgR]?.[imgC] || [255, 51, 102];
+                return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+            }
+
+            if (colorMode === 'classic') {
+                return '#ff3366';
+            } else if (colorMode === 'random') {
+                const colors = ['#ff3366', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+                return colors[Math.floor(Math.random() * colors.length)];
+            } else {
+                return customColor;
+            }
+        }
+
+        function redraw() {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw subtle empty grid background dots
+            grid.forEach(pt => {
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                ctx.fill();
+
+                if (pt.filled) {
+                    ctx.save();
+                    // Subtle breathing pulse effect
+                    const currentScale = (dotRadius * pt.scale) * (1 + Math.sin(pt.pulse) * 0.05);
+                    
+                    // Outer neon glow
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, currentScale * 1.6, 0, Math.PI * 2);
+                    ctx.fillStyle = pt.color;
+                    ctx.globalAlpha = 0.25;
+                    ctx.fill();
+
+                    // Inner bright core
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, currentScale, 0, Math.PI * 2);
+                    ctx.fillStyle = pt.color;
+                    ctx.globalAlpha = 1.0;
+                    ctx.shadowColor = pt.color;
+                    ctx.shadowBlur = 12;
+                    ctx.fill();
+                    ctx.restore();
+                }
+            });
+
+            // Draw spark / scatter particles
+            sparkParticles.forEach((p, idx) => {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.alpha;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.restore();
+
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.decay;
+                p.radius *= 0.96;
+                if (p.alpha <= 0 || p.radius < 0.5) {
+                    sparkParticles.splice(idx, 1);
+                }
+            });
+        }
+
+        function animate() {
+            let animating = false;
+            grid.forEach(pt => {
+                if (pt.filled) {
+                    pt.pulse += 0.08;
+                    if (pt.scale < 1) {
+                        pt.scale += 0.25;
+                        if (pt.scale > 1) pt.scale = 1;
+                        animating = true;
+                    }
+                }
+            });
+
+            if (sparkParticles.length > 0) {
+                animating = true;
+            }
+
+            redraw();
+            if (animating || isSweeping) {
+                requestAnimationFrame(animate);
+            }
+        }
+
+        function createSparkBurst(x, y, color) {
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 3 + 1;
+                sparkParticles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: Math.random() * 3 + 1.5,
+                    color: color,
+                    alpha: 1.0,
+                    decay: Math.random() * 0.03 + 0.02
+                });
+            }
+        }
+
+        function fillRandomDot() {
+            if (isSweeping) return;
+
+            const unfilled = grid.filter(pt => !pt.filled);
+            if (unfilled.length === 0) return;
+
+            const randomIndex = Math.floor(Math.random() * unfilled.length);
+            const pt = unfilled[randomIndex];
+
+            pt.filled = true;
+            pt.scale = 0.2;
+            pt.color = getPointColor(pt.r, pt.c);
+            filledCount++;
+
+            createSparkBurst(pt.x, pt.y, pt.color);
+
+            const introHint = document.getElementById('intro-hint');
+            if (introHint && introHint.style.opacity !== '0') {
+                introHint.style.opacity = '0';
+                setTimeout(() => introHint.remove(), 500);
+            }
+
+            updateStats();
+            requestAnimationFrame(animate);
+
+            if (filledCount >= totalGridCount) {
+                triggerScannerSweep();
+            }
+        }
+
+        function triggerScannerSweep() {
+            if (isSweeping) return;
+            isSweeping = true;
+
+            scannerBeam.classList.add('animate-scan');
+            playSciFiSweepSound();
+
+            // Spawn dramatic laser particles across the grid
+            grid.forEach(pt => {
+                if (Math.random() < 0.4) {
+                    createSparkBurst(pt.x, pt.y, '#38bdf8');
+                }
+            });
+
+            setTimeout(() => {
+                grid.forEach(pt => {
+                    pt.filled = false;
+                    pt.scale = 0;
+                });
+                filledCount = 0;
+                updateStats();
+                redraw();
+
+                scannerBeam.classList.remove('animate-scan');
+                isSweeping = false;
+            }, 1400);
+        }
+
+        function playSciFiSweepSound() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const audioCtx = new AudioContext();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.7);
+                osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 1.3);
+
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.4);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 1.4);
+            } catch (e) {}
+        }
+
+        // Continuous Generation on Hold / Spacebar / Click
+        let isHolding = false;
+        let holdInterval = null;
+
+        function startGenerating() {
+            if (isHolding) return;
+            isHolding = true;
+            fillRandomDot();
+
+            if (holdInterval) clearInterval(holdInterval);
+            holdInterval = setInterval(() => {
+                if (isHolding) {
+                    fillRandomDot();
+                    fillRandomDot(); // Generate faster when holding
+                }
+            }, 40);
+        }
+
+        function stopGenerating() {
+            isHolding = false;
+            if (holdInterval) clearInterval(holdInterval);
+        }
+
+        // Canvas Click & Pointer Listeners
+        canvas.addEventListener('pointerdown', (e) => {
+            startGenerating();
+        });
+
+        window.addEventListener('pointerup', () => {
+            stopGenerating();
+        });
+
+        // Spacebar keydown / keyup
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !e.repeat) {
+                e.preventDefault();
+                startGenerating();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                stopGenerating();
+            }
+        });
+
+        // Virtual Spacebar button for mobile
+        const virtualSpaceBtn = document.getElementById('virtual-space-btn');
+        virtualSpaceBtn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            startGenerating();
+        });
+        virtualSpaceBtn.addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            stopGenerating();
+        });
+        virtualSpaceBtn.addEventListener('pointerleave', (e) => {
+            stopGenerating();
+        });
+
+        // 4-Tap Logic on Top-Left Button
+        triggerBtn.addEventListener('click', () => {
+            tapCount++;
+            triggerBtn.classList.add('scale-110');
+            setTimeout(() => triggerBtn.classList.remove('scale-110'), 150);
+
+            if (tapTimer) clearTimeout(tapTimer);
+
+            if (tapCount >= 4) {
+                tapCount = 0;
+                openSettingsModal();
+            } else {
+                tapTimer = setTimeout(() => {
+                    tapCount = 0;
+                }, 800);
+            }
+        });
+
+        function openSettingsModal() {
+            settingsModal.classList.remove('opacity-0', 'pointer-events-none');
+            settingsModal.querySelector('.glass-dark').classList.remove('scale-95');
+            showToast('✨ 已開啟設定選單');
+        }
+
+        function closeSettingsModal() {
+            settingsModal.classList.add('opacity-0', 'pointer-events-none');
+            settingsModal.querySelector('.glass-dark').classList.add('scale-95');
+        }
+
+        closeModalBtn.addEventListener('click', closeSettingsModal);
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) closeSettingsModal();
+        });
+
+        function showToast(msg) {
+            const toastEl = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toastEl.classList.remove('opacity-0', 'translate-y-4');
+            setTimeout(() => {
+                toastEl.classList.add('opacity-0', 'translate-y-4');
+            }, 2500);
+        }
+
+        // Color Mode Selection
+        const modeBtns = document.querySelectorAll('.mode-btn');
+        const customColorContainer = document.getElementById('custom-color-container');
+
+        modeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                modeBtns.forEach(b => {
+                    b.classList.remove('border-rose-500', 'bg-rose-500/10', 'text-rose-400');
+                    b.classList.add('border-white/10', 'bg-white/5', 'text-gray-300');
+                });
+                btn.classList.remove('border-white/10', 'bg-white/5', 'text-gray-300');
+                btn.classList.add('border-rose-500', 'bg-rose-500/10', 'text-rose-400');
+                
+                colorMode = btn.getAttribute('data-mode');
+                if (colorMode === 'custom') {
+                    customColorContainer.classList.remove('hidden');
+                } else {
+                    customColorContainer.classList.add('hidden');
+                }
+            });
+        });
+
+        const colorPicker = document.getElementById('color-picker');
+        const colorHexText = document.getElementById('color-hex-text');
+        colorPicker.addEventListener('input', (e) => {
+            customColor = e.target.value;
+            colorHexText.innerText = customColor.toUpperCase();
+        });
+
+        const gridSpacingRange = document.getElementById('grid-spacing-range');
+        const gridSizeVal = document.getElementById('grid-size-val');
+        gridSpacingRange.addEventListener('input', (e) => {
+            gridSpacing = parseInt(e.target.value);
+            dotRadius = Math.max(3, Math.floor(gridSpacing / 5));
+            gridSizeVal.innerText = gridSpacing + ' px';
+        });
+
+        // Image Upload & Pixelation
+        const imageUpload = document.getElementById('image-upload');
+        const imageStatusBox = document.getElementById('image-status-box');
+        const uploadedFilename = document.getElementById('uploaded-filename');
+        const clearImageBtn = document.getElementById('clear-image-btn');
+
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            uploadedFilename.innerText = file.name;
+            imageStatusBox.classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    processImageToPixels(img);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function processImageToPixels(img) {
+            const sampleCanvas = document.createElement('canvas');
+            const sampleCtx = sampleCanvas.getContext('2d');
+            
+            const sampleCols = 40;
+            const sampleRows = Math.floor(sampleCols * (img.height / img.width));
+            
+            sampleCanvas.width = sampleCols;
+            sampleCanvas.height = sampleRows;
+
+            sampleCtx.drawImage(img, 0, 0, sampleCols, sampleRows);
+            const imgData = sampleCtx.getImageData(0, 0, sampleCols, sampleRows).data;
+
+            imageColors = [];
+            for (let r = 0; r < sampleRows; r++) {
+                let rowColors = [];
+                for (let c = 0; c < sampleCols; c++) {
+                    const idx = (r * sampleCols + c) * 4;
+                    rowColors.push([imgData[idx], imgData[idx+1], imgData[idx+2]]);
+                }
+                imageColors.push(rowColors);
+            }
+
+            pixelImage = true;
+            showToast('🖼️ 圖片已成功轉為暗黑像素點陣！');
+        }
+
+        clearImageBtn.addEventListener('click', () => {
+            pixelImage = null;
+            imageColors = [];
+            imageUpload.value = '';
+            imageStatusBox.classList.add('hidden');
+            showToast('已清除上傳圖片');
+        });
+
+        applySettingsBtn.addEventListener('click', () => {
+            initGrid();
+            closeSettingsModal();
+            showToast('✅ 設定已成功套用！');
+        });
+
+        resetCanvasBtn.addEventListener('click', () => {
+            initGrid();
+            closeSettingsModal();
+            showToast('🔄 畫面已重置');
+        });
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        window.onload = () => {
+            resizeCanvas();
+        };
+    </script>
+</body>
+</html>
